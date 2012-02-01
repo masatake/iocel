@@ -1,0 +1,11 @@
+(ypack-name "iocel")
+(ypack-version "0.0.0")
+(ypack-license "MIT")
+(ypack-url "https://github.com/masatake/iocel")
+(ypack-require "python-xlutils")
+(ypack-require "python-xlutils")
+(ypack-require "python-xlrd")
+(ypack-require "python-xlwt")
+(ypack-entry "iocel" "/usr/bin/iocel")
+
+

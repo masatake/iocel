@@ -1,0 +1,204 @@
+#!/usr/bin/python
+
+# Copyright (C) 2012 Red Hat, Inc.
+# Red Hat Author(s): Masatake YAMATO <yamato@redhat.com>
+# License: MIT (see below)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+import sys
+import doctest
+import xlrd
+import xlwt
+import xlutils.copy
+import re
+from optparse import OptionParser
+
+#
+# Utilities
+#
+def row_index_from_label(label):
+    """
+    >>> print(row_index_from_label('1'))
+    0
+    """
+    return int(label) - 1
+def col_index_from_label(label):
+    """
+    >>> print (col_index_from_label('A'))
+    0
+    >>> print (col_index_from_label('B'))
+    1
+    >>> print (col_index_from_label('Z'))
+    25
+    >>> print (col_index_from_label('AA'))
+    26
+    >>> print (col_index_from_label('AB'))
+    27
+    >>> print (col_index_from_label('AZ'))
+    51
+    >>> print (col_index_from_label('BA'))
+    52
+    >>> print (col_index_from_label('BB'))
+    53
+    """
+    A = ord('A')
+    r = 0
+    ll = list(label)
+    ll.reverse()
+    for i in range(len(ll)):
+        r += (ord(ll[i]) - A + 1) * (26 ** i) - 1
+    return r
+# doctest.testmod()
+
+cell_regex = re.compile(r'^([A-Z]+)([0-9]+)$')
+def cell_index_from_label(rowx, colx = False):
+    if not colx:
+        if type(rowx) is str:
+            colx , rowx = cell_regex.match(rowx).group(1,2)
+    if type(rowx) is str:
+        rowx = row_index_from_label(rowx)
+    if type(colx) is str:
+        colx = col_index_from_label(colx)    
+    return colx, rowx
+
+def extend_sheet_class(klass):
+    def make_cell_func(f):
+        def cell_func(self, rowx, colx = False):
+            colx, rowx = cell_index_from_label(rowx, colx)
+            return f(self, rowx, colx)
+        return cell_func
+    f = klass.cell
+    klass.cell = make_cell_func(f)
+    return klass
+
+def devcell_get_cell(cmd, args, parser):
+    l = len(args)
+    if l < 2:
+        parser.error("[%s]: incorrect number of arguments"%(cmd))
+    elif l == 2:
+        f = args[0]
+        s = 0
+        c = args[1]
+    elif l == 3:
+        f = args[0]
+        try:
+            s = int(args[1])
+        except:
+            s = unicode(args[1], 'utf-8')
+        c = args[2]
+    else:
+        parser.error("[%s]: incorrect number of arguments"%(cmd))
+    
+    wb = xlrd.open_workbook(f)
+    if type(s) is str or type(s) is unicode:
+        sheet = wb.sheet_by_name(s)
+    else:
+        sheet = wb.sheet_by_index(s)
+
+    c = sheet.cell(c)
+    print c.value
+
+
+def devcell_list_sheets(cmd, args, parser):
+    l = len(args)
+    if l != 1:
+        parser.error("[%s]: incorrect number of arguments"%(cmd))
+    elif l == 1:
+        f = args[0]
+
+    wb = xlrd.open_workbook(f)
+    for sn in wb.sheet_names():
+        print sn
+
+def index_for_sheet(wb, s):
+    return wb.sheet_names().index(s)
+
+def devcell_index_for_sheet(cmd, args, parser):
+    l = len(args)
+    if l != 2:
+        parser.error("[%s]: incorrect number of arguments"%(cmd))
+    elif l == 2:
+        f = args[0]
+        s = unicode(args[1], 'utf-8')
+        wb = xlrd.open_workbook(f)
+    try:
+        i = index_for_sheet(wb, s)
+    except:
+        i = -1
+    print i
+    
+def devcell_set_cell(cmd, args, parser):
+    l = len(args)
+    if l < 2:
+        parser.error("[%s]: incorrect number of arguments"%(cmd))
+    elif l == 2:
+        f = args[0]
+        s = 0
+        c = args[1]
+    elif l == 3:
+        f = args[0]
+        try:
+            s = int(args[1])
+        except:
+            s = unicode(args[1], 'utf-8')
+        c = args[2]
+    else:
+        parser.error("[%s]: incorrect number of arguments"%(cmd))
+    d = sys.stdin.read()
+    d = unicode(d, 'utf-8')
+
+    colx, rowx = cell_index_from_label(c, False)
+    rb = xlrd.open_workbook(f, logfile=sys.stderr, formatting_info=True)
+    wb = xlutils.copy.copy(rb)
+    if type(s) is str or type(s) is unicode:
+        s = index_for_sheet(rb, s)
+    ws = wb.get_sheet(s)
+    
+    ws.write(rowx,colx, d)
+    wb.save('/dev/stdout')
+    
+commands = {
+    'get-cell':        (devcell_get_cell,        "XLSFILE [SHEET] CELL"),
+    'cell':            (devcell_get_cell,        False),
+    'list-sheets':     (devcell_list_sheets,     "XLSFILE"),
+    'sheets':          (devcell_list_sheets,     False),
+    'index-for-sheet': (devcell_index_for_sheet, "XLSFILE"),
+    'set-cell':        (devcell_set_cell,        "XLSFILE [SHEET] CELL"),
+}
+
+def main(args):
+    usage = """usage: 
+"""
+    for k in sorted(commands.keys()):
+        h = commands[k][1]
+        if h:
+            usage = usage + "\n	" + "%prog " + k + " " + h
+
+    parser = OptionParser(usage=usage)
+    (options, args) = parser.parse_args()
+    if len(args) < 1:
+        parser.error("incorrect number of arguments")
+
+    xlrd.sheet.Sheet = extend_sheet_class(xlrd.sheet.Sheet)
+    c = commands[args[0]][0]
+    r = c(args[0], args[1:], parser)
+    sys.exit(r)
+
+main(sys.argv)
