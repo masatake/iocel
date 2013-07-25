@@ -30,6 +30,9 @@ import xlutils.copy
 import re
 from optparse import OptionParser
 
+import codecs
+sys.stdout = codecs.getwriter('utf_8')(sys.stdout)
+
 #
 # Utilities
 #
