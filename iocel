@@ -67,7 +67,7 @@ def col_index_from_label(label):
     return r
 # doctest.testmod()
 
-cell_regex = re.compile(r'^([A-Z]+)([0-9]+)$')
+cell_regex = re.compile(r'^([A-Z]+):?([0-9]+)$')
 def cell_index_from_label(rowx, colx = False):
     if not colx:
         if type(rowx) is str:
